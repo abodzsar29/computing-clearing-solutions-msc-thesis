@@ -45,7 +45,7 @@ class Network:
                     self.graph.add_edge(i, debtor_id, debt=debt_value)
                     if random.random() < 0.5:
                         self.graph.add_edge(debtor_id, i, debt=debt_value)
-            equity = sum(debts.values()) * round(random.uniform(0.5, 1.5), 2)
+            equity = sum(debts.values()) * round(random.uniform(0.25, 0.99), 2)
             self.graph.add_node(i, equity=equity)
             self.nodes.append(Node(i, equity, debts))
             print(f"The equity of node {i} is: {equity}, and debt is {sum(debts.values())}")
@@ -63,30 +63,62 @@ class EisenbergNoe:
         debts_cleared = True
         while debts_cleared:
             debts_cleared = False
-            for node in sorted(self.network.nodes, key=lambda x: x.id):
+            for node in sorted(self.network.nodes, key=lambda x: x.id):  # Iterates through every node in order
                 original_debts = dict(node.debts)
-                self.clear_debts(node)
+                self.clear_debts(node)  # Calls method for each node
                 if node.debts != original_debts:
                     debts_cleared = True
 
     def clear_debts(self, node):
-        total_debt = node.total_debt()
-        if total_debt == 0:
+        total_debt = node.total_debt()  # Gets total debt for chosen node
+        if total_debt == 0:  # If debtors list is empty, it moves to next node
             return
-        debt_items = list(node.debts.items())
-        for debtor_id, owed in debt_items:
-            debtor = self.network.nodes[debtor_id]
-            payment = (owed / total_debt) * node.equity
-            node.equity -= payment
-            if node.equity <= 0:
+        debt_items = list(node.debts.items())  # create a copy of items
+        for debtor_id, owed in debt_items:  # Iterates through the debtors of the chosen node
+            debtor = self.network.nodes[debtor_id]  # Variable debtor gets assigned the id of the debtor
+            payment = (owed / total_debt) * node.equity  # Payment is calculated proportionally
+            node.equity -= payment  # Payment of debtor node is subtracted from its equity
+            if node.equity < node.total_debt():  # If equity is less than total debt, it is considered defaulted
                 node.defaulted = True
-                node.equity = 0
                 logging.info(f'Node {node.id} defaulted.')
-            debtor.equity += payment
-            if debtor_id in node.debts:
-                node.debts[debtor_id] -= payment
-                if node.debts[debtor_id] <= 0:
+            debtor.equity += payment  # Debtor is transferred the equity
+            if debtor_id in node.debts:  # Check if debtor still exists in the list
+                node.debts[debtor_id] -= payment  # Debt of creditor is reduced
+                if node.debts[debtor_id] <= 0:  # If debt is 0, debt is removed from list of creditors of chosen node
                     del node.debts[debtor_id]
+
+# class EisenbergNoe:
+#     def __init__(self, network):
+#         self.network = network
+#
+#     def apply(self):
+#         debts_cleared = True
+#         while debts_cleared:
+#             debts_cleared = False
+#             for node in sorted(self.network.nodes, key=lambda x: x.id):
+#                 original_debts = dict(node.debts)
+#                 self.clear_debts(node)
+#                 if node.debts != original_debts:
+#                     debts_cleared = True
+#
+#     def clear_debts(self, node):
+#         total_debt = node.total_debt()
+#         if total_debt == 0:
+#             return
+#         debt_items = list(node.debts.items())
+#         for debtor_id, owed in debt_items:
+#             debtor = self.network.nodes[debtor_id]
+#             payment = (owed / total_debt) * node.equity
+#             node.equity -= payment
+#             if node.equity <= 0:
+#                 node.defaulted = True
+#                 node.equity = 0
+#                 logging.info(f'Node {node.id} defaulted.')
+#             debtor.equity += payment
+#             if debtor_id in node.debts:
+#                 node.debts[debtor_id] -= payment
+#                 if node.debts[debtor_id] <= 0:
+#                     del node.debts[debtor_id]
 
 
 class Compression:
