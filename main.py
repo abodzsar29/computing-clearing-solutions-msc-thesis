@@ -10,11 +10,29 @@ import copy
 class Node:
     def __init__(self, id, equity, debts):
         self.id = id
-        self.equity = equity
+        self._equity = equity
         self.initial_equity = equity
-        self.debts = debts
+        self._debts = debts
         self.initial_debts = copy.deepcopy(debts)
-        self.defaulted = False
+        self.defaulted = self.equity < self.total_debt()
+
+    @property
+    def equity(self):
+        return self._equity
+
+    @equity.setter
+    def equity(self, value):
+        self._equity = value
+        self.defaulted = self._equity < self.total_debt()
+
+    @property
+    def debts(self):
+        return self._debts
+
+    @debts.setter
+    def debts(self, value):
+        self._debts = value
+        self.defaulted = self.equity < self.total_debt()
 
     def total_debt(self):
         return sum(self.debts.values())
@@ -22,7 +40,6 @@ class Node:
     def reset(self):
         self.equity = self.initial_equity
         self.debts = copy.deepcopy(self.initial_debts)
-        self.defaulted = self.equity < self.total_debt()
 
 
 class Network:
