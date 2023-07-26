@@ -66,8 +66,16 @@ class Network:
             self.graph.add_node(i, equity=equity)
             node = Node(i, equity, debts)
             self.nodes.append(node)
-            print(f"The equity of node {i} is: {equity}, and debt is {sum(debts.values())}")
-            node.defaulted = node.equity < node.total_debt()
+            print(f"The equity of node {i+1} is: {self.nodes[i].equity}, and debt is {sum(debts.values())}")
+            print(f"The defaulted state of node {i+1} is: {self.nodes[i].defaulted}")
+            # node.defaulted = node.equity < node.total_debt()
+            if self.nodes[i].equity <= self.nodes[i].total_debt() and self.nodes[i].defaulted == False:
+                print(f'The node {self.nodes[i].id} is fucked')
+                # print(f'Equity of Node {self.nodes[i].id} is: {equity} and debt is {sum(self.nodes[i].debts.values())}')
+                # raise ZeroDivisionError("HOUSTON! THERE IS PROBLEM!")
+            elif self.nodes[i].equity >= self.nodes[i].total_debt() and self.nodes[i].defaulted == True:
+                print(f'The node {self.nodes[i].id} is fucked')
+                # raise ZeroDivisionError("HOUSTON! THERE IS PROBLEM!")
         # Keep a copy of the original graph for resetting later
         self.original_graph = self.graph.copy()
 
@@ -95,10 +103,8 @@ class EisenbergNoe:
         # After all iterations have completed, set the defaulted value of each node based on its final equity value
         for node in self.network.nodes:
             node.defaulted = node.equity <= 0
-            if node.defaulted:
-                logging.info(f'Node {node.id} defaulted.')
-            else:
-                logging.info(f'Node {node.id} has positive equity.')
+            # print(f"The defaulted state of node {node.id + 1} is: {node.defaulted}")
+            print(f"The equity of node {node.id+1} is: {node.equity}, and debt is {node.total_debt()}, Defaulted: {node.defaulted}")
 
     def clear_debts(self, node):
         total_debt = node.total_debt()
@@ -108,14 +114,15 @@ class EisenbergNoe:
         for debtor_id, owed in debt_items:
             debtor = self.network.nodes[debtor_id]
             payment = (owed / total_debt) * node.equity
-            node.equity -= payment
-            debtor.equity += payment
+            node.equity -= payment  # Using equity setter method
+            debtor.equity += payment  # Using equity setter method of debtor
             if debtor_id in node.debts:
                 node.debts[debtor_id] -= payment
                 if node.debts[debtor_id] <= 0:
                     del node.debts[debtor_id]
-
-
+            # Update defaulted for both node and debtor
+            node.defaulted = node.equity < node.total_debt()
+            debtor.defaulted = debtor.equity < debtor.total_debt()
 
 class Compression:
     def __init__(self, network):
@@ -127,7 +134,7 @@ class Compression:
             node.defaulted = node.equity < node.total_debt()
 
     def simplify_debts(self, node):
-        debt_items = list(node.debts.items())  # create a copy of items
+        debt_items = list(node.debts.items())
         for debtor_id, owed in debt_items:
             if debtor_id in node.debts and node.id in self.network.nodes[debtor_id].debts:
                 reciprocal_debt = self.network.nodes[debtor_id].debts[node.id]
@@ -141,6 +148,10 @@ class Compression:
                     del self.network.nodes[debtor_id].debts[node.id]
                     if self.network.graph.has_edge(debtor_id, node.id):
                         self.network.graph.remove_edge(debtor_id, node.id)
+            # update defaulted for both node and debtor
+            node.defaulted = node.equity < node.total_debt()
+            debtor = self.network.nodes[debtor_id]
+            debtor.defaulted = debtor.equity < debtor.total_debt()
 
 
 class NetworkGraph(tk.Tk):
@@ -163,11 +174,31 @@ class NetworkGraph(tk.Tk):
         self.reset_button = tk.Button(self, text="Reset", command=self.reset)
         self.reset_button.pack()
 
+        # Add a new button
+        self.check_button = tk.Button(self, text="Check Equity", command=self.check_debt_equity)
+        self.check_button.pack()
+
         self.pos = nx.spring_layout(self.network.graph)
+        self.draw_network()
+
+    # Add a new method
+    def check_debt_equity(self):
+        for node in self.network.nodes:
+            if node.equity < node.total_debt():
+                node.defaulted = True
+            else:
+                node.defaulted = False
+            print(f"The defaulted state of node {node.id + 1} is: {node.defaulted}")
         self.draw_network()
 
     def draw_network(self):
         self.fig.clear()
+        # colors = []
+        # for node in network.nodes:
+        #     if node.defaulted:
+        #           colors.append('red')
+        #     elif not node.defaulted:
+        #         colors.append('green')
         colors = ['red' if node.defaulted else 'green' for node in self.network.nodes]
         labels = {node.id: f'ID: {node.id + 1}\nEquity: {node.equity:.2f}\nDebt: {node.total_debt():.2f}' for node in self.network.nodes}
         nx.draw(self.network.graph, pos=self.pos, with_labels=True, labels=labels, node_color=colors, ax=self.fig.add_subplot(111))
