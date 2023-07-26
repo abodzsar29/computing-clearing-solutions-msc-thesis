@@ -124,6 +124,7 @@ class Compression:
     def apply(self):
         for node in self.network.nodes:
             self.simplify_debts(node)
+            node.defaulted = node.equity < node.total_debt()
 
     def simplify_debts(self, node):
         debt_items = list(node.debts.items())  # create a copy of items
