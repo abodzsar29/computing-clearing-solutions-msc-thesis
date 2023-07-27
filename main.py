@@ -103,16 +103,24 @@ class Network:
             creditor_node = random.choice([other_node for other_node in nodes if other_node != current_node])
         return creditor_node
 
+    def defaulted_nodes_count(self):
+        return sum(1 for node in self.nodes if node.defaulted)
+
     def reset(self):
         for node in self.nodes:
             node.reset()
         # Reset the graph to its original state
         self.graph = self.original_graph.copy()
+        logging.info("Network has been reset.")
+
+    def survived_nodes_count(self):
+        return sum(1 for node in self.nodes if not node.defaulted)
 
 
 class EisenbergNoe:
     def __init__(self, network):
         self.network = network
+        self.initial_equities = {node.id: node.equity for node in network.nodes}  # Capture initial equities
 
     def apply(self):
         debts_cleared = True
@@ -127,9 +135,13 @@ class EisenbergNoe:
         # After all iterations have completed, set the defaulted value of each node based on its final equity value
         for node in self.network.nodes:
             node.defaulted = node.equity <= 0
-            # print(f"The defaulted state of node {node.id + 1} is: {node.defaulted}")
-            print(
-                f"The equity of node {node.id} is: {node.equity}, and debt is {node.total_debt()}, Defaulted: {node.defaulted}")
+            # print( f"{node.id} is: Defaulted: {node.defaulted}")
+
+    def is_pareto_improvement(self):
+        for node in self.network.nodes:
+            if node.equity < self.initial_equities[node.id]:
+                return False
+        return True
 
     def clear_debts(self, node):
         total_debt = node.total_debt()
@@ -145,9 +157,16 @@ class EisenbergNoe:
                 node.debts[debtor_id] -= payment
                 if node.debts[debtor_id] <= 0:
                     del node.debts[debtor_id]
+                    logging.info(f"Node {node.id} paid off all its debts.")
+            # Add print statement to display the payment
+            # print(f"Node {node.id} paid {payment} to Node {debtor_id}. New equity of Node {node.id}: {node.equity}, Node {debtor_id}: {debtor.equity}")
             # Update defaulted for both node and debtor
             node.defaulted = node.equity < node.total_debt()
             debtor.defaulted = debtor.equity < debtor.total_debt()
+
+    def node_equity_change(self):
+        for node in self.network.nodes:
+            print(f'Node {node.id} Equity Change: {node.equity - self.initial_equities[node.id]}')
 
 
 class Compression:
@@ -158,6 +177,7 @@ class Compression:
         for node in self.network.nodes:
             self.simplify_debts(node)
             node.defaulted = node.equity < node.total_debt()
+            node.colour = 'red' if node.defaulted is True else 'green'  # Update color
 
     def simplify_debts(self, node):
         debt_items = list(node.debts.items())
@@ -174,10 +194,12 @@ class Compression:
                     del self.network.nodes[debtor_id].debts[node.id]
                     if self.network.graph.has_edge(debtor_id, node.id):
                         self.network.graph.remove_edge(debtor_id, node.id)
-            # update defaulted for both node and debtor
+            # update defaulted and color for both node and debtor
             node.defaulted = node.equity < node.total_debt()
+            node.colour = 'red' if node.defaulted is True else 'green'  # Update color
             debtor = self.network.nodes[debtor_id]
             debtor.defaulted = debtor.equity < debtor.total_debt()
+            debtor.colour = 'red' if debtor.defaulted is True else 'green'  # Update color
 
 
 class NetworkGraph(tk.Tk):
@@ -191,6 +213,12 @@ class NetworkGraph(tk.Tk):
         self.net_debt_label = tk.Label(self)
         self.net_eq_label.pack()
         self.net_debt_label.pack()
+        self.defaulted_nodes_label = tk.Label(self)
+        self.defaulted_nodes_label.pack()
+        self.survived_nodes_label = tk.Label(self)
+        self.survived_nodes_label.pack()
+        self.pareto_improvement_label = tk.Label(self, text="Pareto Improvement: -")
+        self.pareto_improvement_label.pack()
         self.update_labels()
 
         self.en_button = tk.Button(self, text="EisenbergNoe", command=self.eisenberg_noe_apply)
@@ -199,7 +227,7 @@ class NetworkGraph(tk.Tk):
         self.comp_button = tk.Button(self, text="Compression", command=self.compression_apply)
         self.comp_button.pack()
 
-        self.quit_button = tk.Button(self, text="Quit", command=self.quit)
+        self.quit_button = tk.Button(self, text="Quit", command=self.quit_command)
         self.quit_button.pack()
 
         self.reset_button = tk.Button(self, text="Reset", command=self.reset)
@@ -212,7 +240,13 @@ class NetworkGraph(tk.Tk):
     def update_labels(self):
         self.net_eq_label.config(text=f"Total Equity: {self.network.total_network_equity()}")
         self.net_debt_label.config(text=f"Total Debt: {self.network.total_network_debt()}")
+        self.defaulted_nodes_label.config(text=f"Defaulted Nodes: {self.network.defaulted_nodes_count()}")
+        self.survived_nodes_label.config(text=f"Survived Nodes: {self.network.survived_nodes_count()}")
+        self.pareto_improvement_label.config(text=f"Pareto Improvement: -")
 
+    def quit_command(self):
+        logging.info("Quit button pressed.")
+        self.quit()
 
     def draw_network(self):
         self.fig.clear()
@@ -227,18 +261,30 @@ class NetworkGraph(tk.Tk):
         self.canvas.draw()
 
 
-
     def eisenberg_noe_apply(self):
-        EisenbergNoe(self.network).apply()
+        eisenberg_noe = EisenbergNoe(self.network)
+        eisenberg_noe.apply()
+        eisenberg_noe.node_equity_change()  # Print the equity changes for each node
         self.draw_network()
+        logging.info("EisenbergNoe algorithm applied.")
+        self.update_labels()
+
+        # Update Pareto Improvement status
+        pareto_improvement_status = "Yes" if eisenberg_noe.is_pareto_improvement() else "No"
+        self.pareto_improvement_label.config(text=f"Pareto Improvement: {pareto_improvement_status}")
+
 
     def compression_apply(self):
         Compression(self.network).apply()
         self.draw_network()
+        logging.info("Compression algorithm applied.")
+        self.update_labels()
 
     def reset(self):
         self.network.reset()
         self.draw_network()
+        self.update_labels()
+        self.pareto_improvement_label.config(text=f"Pareto Improvement: -")
 
 
 if __name__ == '__main__':
