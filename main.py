@@ -15,6 +15,8 @@ class Node:
         self._debts = debts
         self.initial_debts = copy.deepcopy(debts)
         self.defaulted = self.equity < self.total_debt()
+        self.colour = 'red' if self.defaulted is True else 'green'
+        self.totaldebt = self.total_debt()
 
     @property
     def equity(self):
@@ -24,6 +26,7 @@ class Node:
     def equity(self, value):
         self._equity = value
         self.defaulted = self._equity < self.total_debt()
+        self.colour = 'red' if self.defaulted is True else 'green'  # Update color
 
     @property
     def debts(self):
@@ -33,6 +36,7 @@ class Node:
     def debts(self, value):
         self._debts = value
         self.defaulted = self.equity < self.total_debt()
+        self.colour = 'red' if self.defaulted is True else 'green'  # Update color
 
     def total_debt(self):
         return sum(self.debts.values())
@@ -54,30 +58,50 @@ class Network:
         self.graph = nx.DiGraph()
         for i in range(self.size):
             debts = {}
-            for _ in range(int(self.size * random.uniform(0.1, 1))):
-                debtor_id = random.choice(range(self.size))
-                if debtor_id != i:
-                    debt_value = random.randint(50, 1000)
-                    debts[debtor_id] = debt_value
-                    self.graph.add_edge(i, debtor_id, debt=debt_value)
-                    if random.random() < 0.5:
-                        self.graph.add_edge(debtor_id, i, debt=debt_value)
-            equity = sum(debts.values()) * round(random.uniform(0.25, 1.25), 2)
+            # Ensuring at least one debt
+            debtor_id = self.get_unique_debtor(i, debts, self.size)
+            debt_value = random.randint(50, 1000)
+            debts[debtor_id] = debt_value
+            self.graph.add_edge(i, debtor_id, debt=debt_value)
+            # More debts
+            for _ in range(int(self.size * random.uniform(0.1, 1)) - 1):
+                debtor_id = self.get_unique_debtor(i, debts, self.size)
+                debt_value = random.randint(50, 1000)
+                debts[debtor_id] = debt_value
+                self.graph.add_edge(i, debtor_id, debt=debt_value)
+                if random.random() < 0.5:
+                    self.graph.add_edge(debtor_id, i, debt=debt_value)
+            equity = sum(debts.values()) * round(random.uniform(0.25, 0.99), 2)
             self.graph.add_node(i, equity=equity)
             node = Node(i, equity, debts)
             self.nodes.append(node)
-            print(f"The equity of node {i+1} is: {self.nodes[i].equity}, and debt is {sum(debts.values())}")
-            print(f"The defaulted state of node {i+1} is: {self.nodes[i].defaulted}")
-            # node.defaulted = node.equity < node.total_debt()
-            if self.nodes[i].equity <= self.nodes[i].total_debt() and self.nodes[i].defaulted == False:
-                print(f'The node {self.nodes[i].id} is fucked')
-                # print(f'Equity of Node {self.nodes[i].id} is: {equity} and debt is {sum(self.nodes[i].debts.values())}')
-                # raise ZeroDivisionError("HOUSTON! THERE IS PROBLEM!")
-            elif self.nodes[i].equity >= self.nodes[i].total_debt() and self.nodes[i].defaulted == True:
-                print(f'The node {self.nodes[i].id} is fucked')
-                # raise ZeroDivisionError("HOUSTON! THERE IS PROBLEM!")
-        # Keep a copy of the original graph for resetting later
-        self.original_graph = self.graph.copy()
+
+        # Ensuring at least one creditor for each node
+        for node in self.nodes:
+            if node.total_debt() == 0:
+                creditor_node = self.get_unique_creditor(node, self.nodes)
+                debt_value = random.randint(50, 1000)
+                node.debts[creditor_node.id] = debt_value
+                self.graph.add_edge(node.id, creditor_node.id, debt=debt_value)
+        self.original_graph = self.graph.copy()  # Keep a copy of the original graph for resetting later
+
+    def total_network_equity(self):
+        return sum(node.equity for node in self.nodes)
+
+    def total_network_debt(self):
+        return sum(node.total_debt() for node in self.nodes)
+
+    def get_unique_debtor(self, current_id, debts, size):
+        debtor_id = random.choice([idx for idx in range(size) if idx != current_id])
+        while debtor_id in debts:
+            debtor_id = random.choice([idx for idx in range(size) if idx != current_id])
+        return debtor_id
+
+    def get_unique_creditor(self, current_node, nodes):
+        creditor_node = random.choice([other_node for other_node in nodes if other_node != current_node])
+        while creditor_node.id in current_node.debts:
+            creditor_node = random.choice([other_node for other_node in nodes if other_node != current_node])
+        return creditor_node
 
     def reset(self):
         for node in self.nodes:
@@ -104,7 +128,8 @@ class EisenbergNoe:
         for node in self.network.nodes:
             node.defaulted = node.equity <= 0
             # print(f"The defaulted state of node {node.id + 1} is: {node.defaulted}")
-            print(f"The equity of node {node.id+1} is: {node.equity}, and debt is {node.total_debt()}, Defaulted: {node.defaulted}")
+            print(
+                f"The equity of node {node.id} is: {node.equity}, and debt is {node.total_debt()}, Defaulted: {node.defaulted}")
 
     def clear_debts(self, node):
         total_debt = node.total_debt()
@@ -123,6 +148,7 @@ class EisenbergNoe:
             # Update defaulted for both node and debtor
             node.defaulted = node.equity < node.total_debt()
             debtor.defaulted = debtor.equity < debtor.total_debt()
+
 
 class Compression:
     def __init__(self, network):
@@ -161,6 +187,11 @@ class NetworkGraph(tk.Tk):
         self.fig = plt.figure(figsize=(10, 8))
         self.canvas = FigureCanvasTkAgg(self.fig, self)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.net_eq_label = tk.Label(self)
+        self.net_debt_label = tk.Label(self)
+        self.net_eq_label.pack()
+        self.net_debt_label.pack()
+        self.update_labels()
 
         self.en_button = tk.Button(self, text="EisenbergNoe", command=self.eisenberg_noe_apply)
         self.en_button.pack()
@@ -174,35 +205,28 @@ class NetworkGraph(tk.Tk):
         self.reset_button = tk.Button(self, text="Reset", command=self.reset)
         self.reset_button.pack()
 
-        # Add a new button
-        self.check_button = tk.Button(self, text="Check Equity", command=self.check_debt_equity)
-        self.check_button.pack()
-
         self.pos = nx.spring_layout(self.network.graph)
+        self.pos = dict(sorted(self.pos.items()))
         self.draw_network()
 
-    # Add a new method
-    def check_debt_equity(self):
-        for node in self.network.nodes:
-            if node.equity < node.total_debt():
-                node.defaulted = True
-            else:
-                node.defaulted = False
-            print(f"The defaulted state of node {node.id + 1} is: {node.defaulted}")
-        self.draw_network()
+    def update_labels(self):
+        self.net_eq_label.config(text=f"Total Equity: {self.network.total_network_equity()}")
+        self.net_debt_label.config(text=f"Total Debt: {self.network.total_network_debt()}")
+
 
     def draw_network(self):
         self.fig.clear()
-        # colors = []
-        # for node in network.nodes:
-        #     if node.defaulted:
-        #           colors.append('red')
-        #     elif not node.defaulted:
-        #         colors.append('green')
-        colors = ['red' if node.defaulted else 'green' for node in self.network.nodes]
-        labels = {node.id: f'ID: {node.id + 1}\nEquity: {node.equity:.2f}\nDebt: {node.total_debt():.2f}' for node in self.network.nodes}
-        nx.draw(self.network.graph, pos=self.pos, with_labels=True, labels=labels, node_color=colors, ax=self.fig.add_subplot(111))
+        colors = {node.id: node.colour for node in self.network.nodes}
+        labels = {
+            node.id: f'ID: {node.id}\nEquity: {node.equity:.2f}\nDebt: {node.total_debt():.2f}\nColor: {node.colour}'
+            for node in self.network.nodes}
+        nx.draw(self.network.graph, pos=self.pos, with_labels=True, labels=labels,
+                node_color=[colors[node] for node in self.network.graph.nodes()],
+                ax=self.fig.add_subplot(111))
+        self.update_labels()
         self.canvas.draw()
+
+
 
     def eisenberg_noe_apply(self):
         EisenbergNoe(self.network).apply()

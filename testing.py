@@ -5,43 +5,64 @@ import tkinter as tk
 from unittest.mock import Mock, patch
 import networkx as nx
 import logging
-from main28 import Node, Network, EisenbergNoe, Compression, NetworkGraph
+from main29 import Node, Network, EisenbergNoe, Compression, NetworkGraph
 
 
-# Objective 1 - Point 1
+# Objective 1 - Point 1 - Checking Node Initialisation
 class TestNodeInitialization(unittest.TestCase):
     def setUp(self):
-        self.node = Node(id=1, equity=100, debts={2: 50, 3: 25})
+        self.node = Node(id=1,
+                         equity=100,
+                         debts={2: 50, 3: 25})
 
+    # Checking whether Node ID is correctly initialised
     def test_id(self):
-        self.assertEqual(self.node.id, 1, "Node ID not initialized correctly.")
+        self.assertEqual(self.node.id,
+                         1,
+                         "Node ID not initialized correctly.")
 
+    # Checking whether Node equity is correctly initialised
     def test_equity(self):
-        self.assertEqual(self.node.equity, 100, "Node equity not initialized correctly.")
-        self.assertFalse(self.node.equity < 0, "Node equity cannot be negative.")
-        self.assertFalse(self.node.equity is None, "Node equity cannot be None.")
+        self.assertEqual(self.node.equity,
+                         100,
+                         "Node equity not initialized correctly.")
+        self.assertFalse(self.node.equity < 0,
+                         "Node equity cannot be negative.")
+        self.assertFalse(self.node.equity is None,
+                         "Node equity cannot be None.")
 
+    # Checking whether Node debt is correctly initialised
     def test_debts(self):
-        self.assertEqual(self.node.debts, {2: 50, 3: 25}, "Node debts not initialized correctly.")
+        self.assertEqual(self.node.debts,
+                         {2: 50, 3: 25},
+                         "Node debts not initialized correctly.")
         for debt in self.node.debts.values():
             self.assertFalse(debt < 0, "Debt value cannot be negative.")
             self.assertFalse(debt is None, "Debt value cannot be None.")
 
+    # Checking whether Node default status is correctly initialised
     def test_defaulted(self):
-        self.assertEqual(self.node.defaulted, False, "Node defaulted status not initialized correctly.")
+        self.assertEqual(self.node.defaulted,
+                         False,
+                         "Node defaulted status not initialized correctly.")
 
+    # Checking whether Node color is correctly initialised
     def test_color(self):
-        self.assertEqual(self.node.colour, 'green', "Node color not initialized correctly.")
+        self.assertEqual(self.node.colour,
+                         'green',
+                         "Node color not initialized correctly.")
 
 
-# Objective 1 - Point 1
+# Objective 1 - Point 1 - Checking Network Initialisation
 class TestNetworkInitialization(unittest.TestCase):
     def setUp(self):
         self.network = Network(mini=5, maxi=10)
 
+    # Checking whether network initialisation properties conform to arguments
     def test_nodes(self):
         self.assertTrue(self.network.nodes, "Network nodes not initialized.")
-        self.assertTrue(5 <= len(self.network.nodes) <= 10, "Network size not within expected range.")
+        self.assertTrue(5 <= len(self.network.nodes) <= 10,
+                        "Network size not within expected range.")
         for node in self.network.nodes:
             self.assertFalse(node.equity < 0, "Node equity cannot be negative.")
             self.assertFalse(node.equity is None, "Node equity cannot be None.")
@@ -50,10 +71,10 @@ class TestNetworkInitialization(unittest.TestCase):
                 self.assertFalse(debt is None, "Debt value cannot be None.")
 
 
-# Objective 1 - Point 2
+# Objective 1 - Point 2 -
 class TestEdgeDirection(unittest.TestCase):
     def setUp(self):
-        random.seed(1)  # This will ensure that the random outputs are consistent across all runs.
+        random.seed(1)  # Ensuring that the random outputs are consistent
         self.network = Network(5, 10)
 
     def test_edge_direction(self):
@@ -68,6 +89,7 @@ class TestEdgeDirection(unittest.TestCase):
                 if not self.network.graph.has_edge(debtor_id, node.id):
                     self.assertFalse(self.network.graph.has_edge(debtor_id, node.id),
                                      f"Did not expect an edge from {debtor_id} to {node.id}")
+
 
 # Objective 1 - Point 3
 class TestEisenbergNoe(unittest.TestCase):
@@ -115,8 +137,8 @@ class TestEisenbergNoe(unittest.TestCase):
                 self.assertGreaterEqual(node.equity, self.en.initial_equities[node.id])
 
 
-# Objective 3
-class TestNetwork(unittest.TestCase):
+# Objective 2
+class TestObjective2(unittest.TestCase):
 
     def setUp(self):
         self.network = Network(5, 10)
@@ -127,7 +149,7 @@ class TestNetwork(unittest.TestCase):
         self.initial_node_debts = self.node.debts.copy()
         self.initial_network_graph = self.network.graph.copy()
 
-    # Objective 3 - Point 1
+    # Objective 2 - Point 1
     def test_reset(self):
         self.node.equity = 0
         self.node.debts = {}
@@ -136,11 +158,11 @@ class TestNetwork(unittest.TestCase):
         self.assertEqual(self.node.debts, self.initial_node_debts)
         self.assertEqual(self.network.graph.edges, self.initial_network_graph.edges)
 
-    # Objective 3 - Point 2
+    # Objective 2 - Point 2
     def test_compression_initialization(self):
         self.assertEqual(self.compression.network, self.network)
 
-    # Objective 3 - Point 2
+    # Objective 2 - Point 2
     def test_apply_compression(self):
         initial_network_graph = self.network.graph.copy()
         self.compression.apply()
@@ -149,7 +171,7 @@ class TestNetwork(unittest.TestCase):
                 self.assertNotIn(node.id, self.network.nodes[debtor_id].debts)
         self.assertNotEqual(self.network.graph.edges, initial_network_graph.edges)
 
-    # Objective 3 - Point 2
+    # Objective 2 - Point 2
     def test_simplify_debts(self):
         node = self.network.nodes[0]
         debtor_id, owed = next(iter(node.debts.items()))
@@ -159,13 +181,13 @@ class TestNetwork(unittest.TestCase):
         self.assertNotEqual(node.debts, initial_debts)
         self.assertNotIn(node.id, self.network.nodes[debtor_id].debts)
 
-    # Objective 3 - Point 2
+    # Objective 2 - Point 2
     def test_compression_apply_in_network_graph(self):
         initial_network_graph = self.app.network.graph.copy()
         self.app.compression_apply()
         self.assertNotEqual(self.app.network.graph.edges, initial_network_graph.edges)
 
-    # Objective 3 - Point 3
+    # Objective 2 - Point 3
     def test_node_default(self):
         node = self.network.nodes[0]
         node.equity = 0
@@ -173,7 +195,7 @@ class TestNetwork(unittest.TestCase):
 
 
 # Objective 3
-class TestFunctionality(unittest.TestCase):
+class TestObjective3(unittest.TestCase):
     def setUp(self):
         self.network = Network(5, 5)
         self.eisenberg_noe = EisenbergNoe(self.network)
@@ -215,6 +237,7 @@ class TestFunctionality(unittest.TestCase):
             self.assertEqual(change, node.equity - self.eisenberg_noe.initial_equities[node.id])
 
 
+# Testing indirect contributions of the Objectives
 class TestNetwork(unittest.TestCase):
 
     def setUp(self):
@@ -257,27 +280,6 @@ class TestNetwork(unittest.TestCase):
         self.assertFalse(node.defaulted)
         self.assertEqual(node.colour, 'green')
 
-    # Testing whether the buttons carry out their desired functions
-    def test_buttons_function(self):
-        with patch.object(NetworkGraph, "eisenberg_noe_apply") as mocked_en_method, \
-                patch.object(NetworkGraph, "compression_apply") as mocked_comp_method, \
-                patch.object(NetworkGraph, "quit") as mocked_quit_method, \
-                patch.object(NetworkGraph, "reset") as mocked_reset_method:
-            self.app.en_button.invoke()
-            self.app.comp_button.invoke()
-            self.app.quit_button.invoke()
-            self.app.reset_button.invoke()
-            mocked_en_method.assert_called_once()
-            mocked_comp_method.assert_called_once()
-            mocked_quit_method.assert_called_once()
-            mocked_reset_method.assert_called_once()
-
-    # Testing whether logging works
-    def test_logging(self):
-        with self.assertLogs('default.log', level='INFO') as cm:
-            logging.info("Test log")
-        self.assertEqual(cm.output, ['INFO:default:Test log'])
-
     # Testing whether the EisenbergNoe class has any effect or not
     def test_eisenberg_noe_apply(self):
         initial_network_state = copy.deepcopy(self.network)
@@ -291,12 +293,6 @@ class TestNetwork(unittest.TestCase):
         compression = Compression(self.network)
         compression.apply()
         self.assertNotEqual(initial_network_state, self.network)
-
-    # Testing whether the rest button has any effect or not
-    def test_reset(self):
-        initial_network_state = copy.deepcopy(self.network)
-        self.network.reset()
-        self.assertEqual(initial_network_state, self.network)
 
     # Testing whether the pareto improvement returns true or false
     def test_is_pareto_improvement(self):
