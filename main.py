@@ -17,6 +17,7 @@ class Node:
         self.defaulted = self.equity < self.total_debt()
         self.colour = 'red' if self.defaulted is True else 'green'
         self.totaldebt = self.total_debt()
+        self.update_color()  # Initial color update
 
     @property
     def equity(self):
@@ -25,8 +26,7 @@ class Node:
     @equity.setter
     def equity(self, value):
         self._equity = value
-        self.defaulted = self._equity < self.total_debt()
-        self.colour = 'red' if self.defaulted is True else 'green'  # Update color
+        self.update_color()  # Update color when equity changes
 
     @property
     def debts(self):
@@ -35,8 +35,7 @@ class Node:
     @debts.setter
     def debts(self, value):
         self._debts = value
-        self.defaulted = self.equity < self.total_debt()
-        self.colour = 'red' if self.defaulted is True else 'green'  # Update color
+        self.update_color()  # Update color when debts change
 
     def total_debt(self):
         return sum(self.debts.values())
@@ -44,6 +43,12 @@ class Node:
     def reset(self):
         self.equity = self.initial_equity
         self.debts = copy.deepcopy(self.initial_debts)
+        self.update_color()  # Update color when resetting
+
+    def update_color(self):
+        # This method checks the defaulted state and updates the color accordingly
+        self.defaulted = self._equity < self.total_debt()
+        self.colour = 'red' if self.defaulted else 'green'
 
 
 class Network:
@@ -56,22 +61,25 @@ class Network:
         self.size = random.randint(self.mini, self.maxi)
         self.nodes = []
         self.graph = nx.DiGraph()
+
+        # Precompute size for more debts
+        more_debts_size = [int(self.size * random.uniform(0.1, 1)) - 1 for _ in range(self.size)]
+
         for i in range(self.size):
             debts = {}
+
             # Ensuring at least one debt
-            debtor_id = self.get_unique_debtor(i, debts, self.size)
-            debt_value = random.randint(50, 1000)
-            debts[debtor_id] = debt_value
+            debtor_id, debt_value = self.create_debt(i, debts)
             self.graph.add_edge(i, debtor_id, debt=debt_value)
+
             # More debts
-            for _ in range(int(self.size * random.uniform(0.1, 1)) - 1):
-                debtor_id = self.get_unique_debtor(i, debts, self.size)
-                debt_value = random.randint(50, 1000)
-                debts[debtor_id] = debt_value
+            for _ in range(more_debts_size[i]):
+                debtor_id, debt_value = self.create_debt(i, debts)
                 self.graph.add_edge(i, debtor_id, debt=debt_value)
                 if random.random() < 0.5:
                     self.graph.add_edge(debtor_id, i, debt=debt_value)
-            equity = sum(debts.values()) * round(random.uniform(0.25, 0.99), 2)
+
+            equity = sum(debts.values()) * round(random.uniform(0.1, 0.5), 2)
             self.graph.add_node(i, equity=equity)
             node = Node(i, equity, debts)
             self.nodes.append(node)
@@ -84,6 +92,12 @@ class Network:
                 node.debts[creditor_node.id] = debt_value
                 self.graph.add_edge(node.id, creditor_node.id, debt=debt_value)
         self.original_graph = self.graph.copy()  # Keep a copy of the original graph for resetting later
+
+    def create_debt(self, current_id, debts):
+        debtor_id = self.get_unique_debtor(current_id, debts, self.size)
+        debt_value = random.randint(50, 1000)
+        debts[debtor_id] = debt_value
+        return debtor_id, debt_value
 
     def total_network_equity(self):
         return sum(node.equity for node in self.nodes)
@@ -134,8 +148,9 @@ class EisenbergNoe:
 
         # After all iterations have completed, set the defaulted value of each node based on its final equity value
         for node in self.network.nodes:
-            node.defaulted = node.equity <= 0
-            # print( f"{node.id} is: Defaulted: {node.defaulted}")
+            node.defaulted = node._equity < node.total_debt()
+            # node.defaulted = node.equity <= 0
+            print(f"{node.id} is: Defaulted: {node.defaulted}")
 
     def is_pareto_improvement(self):
         for node in self.network.nodes:
@@ -157,10 +172,11 @@ class EisenbergNoe:
                 node.debts[debtor_id] -= payment
                 if node.debts[debtor_id] <= 0:
                     del node.debts[debtor_id]
+                    if self.network.graph.has_edge(node.id, debtor_id):  # Checks if the edge exists from node to debtor
+                        self.network.graph.remove_edge(node.id, debtor_id)  # Removes the edge from node to debtor
                     logging.info(f"Node {node.id} paid off all its debts.")
-            # Add print statement to display the payment
-            # print(f"Node {node.id} paid {payment} to Node {debtor_id}. New equity of Node {node.id}: {node.equity}, Node {debtor_id}: {debtor.equity}")
-            # Update defaulted for both node and debtor
+            node.update_color()
+            debtor.update_color()
             node.defaulted = node.equity < node.total_debt()
             debtor.defaulted = debtor.equity < debtor.total_debt()
 
@@ -187,13 +203,13 @@ class Compression:
                 if owed <= reciprocal_debt:
                     self.network.nodes[debtor_id].debts[node.id] -= owed
                     del node.debts[debtor_id]
-                    if self.network.graph.has_edge(node.id, debtor_id):
-                        self.network.graph.remove_edge(node.id, debtor_id)
+                    if self.network.graph.has_edge(node.id, debtor_id):  # Checks if the edge exists from node to debtor
+                        self.network.graph.remove_edge(node.id, debtor_id)  # Removes the edge from node to debtor
                 else:
                     node.debts[debtor_id] -= reciprocal_debt
                     del self.network.nodes[debtor_id].debts[node.id]
-                    if self.network.graph.has_edge(debtor_id, node.id):
-                        self.network.graph.remove_edge(debtor_id, node.id)
+                    if self.network.graph.has_edge(debtor_id, node.id):  # Checks if the edge exists from debtor to node
+                        self.network.graph.remove_edge(debtor_id, node.id)  # Removes the edge from debtor to node
             # update defaulted and color for both node and debtor
             node.defaulted = node.equity < node.total_debt()
             node.colour = 'red' if node.defaulted is True else 'green'  # Update color
@@ -252,7 +268,7 @@ class NetworkGraph(tk.Tk):
         self.fig.clear()
         colors = {node.id: node.colour for node in self.network.nodes}
         labels = {
-            node.id: f'ID: {node.id}\nEquity: {node.equity:.2f}\nDebt: {node.total_debt():.2f}\nColor: {node.colour}'
+            node.id: f'ID: {node.id}\nEquity: {node.equity:.2f}\nDebt: {node.total_debt():.2f}\nDefaulted: {node.defaulted}'
             for node in self.network.nodes}
         nx.draw(self.network.graph, pos=self.pos, with_labels=True, labels=labels,
                 node_color=[colors[node] for node in self.network.graph.nodes()],
