@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import copy
 import pandas as pd
+import os
 
+# Comment these if program freezes due to extensive results
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
@@ -91,7 +93,7 @@ class Network:
             self.graph.add_edge(current_id, debtor_id, debt=debt_value)  # Add an edge for the debt
             if random.random() < 0.5:  # With a 50% chance
                 self.graph.add_edge(debtor_id, current_id, debt=debt_value)  # Add an edge for the debt in reverse direction
-        # equity = sum(debts.values()) * round(random.uniform(0.5, 0.75), 2)  # Calculate equity as a sum of debts times a random factor
+        # equity = (sum(debts.values())) * round(random.uniform(0.5, 1.5), 2)  # Calculate equity as a sum of debts times a random factor
         equity = random.randint(50, 1000)  # Assign a random equity value
         self.graph.add_node(current_id, equity=equity)  # Add the node to the graph with the calculated equity
         return Node(current_id, equity, debts)  # Return the created Node
@@ -246,24 +248,52 @@ class NetworkGraph(tk.Tk):
         self.pareto_improvement_label.pack()
         self.update_labels()
 
-        self.en_button = tk.Button(self, text="EisenbergNoe", command=self.eisenberg_noe_apply)
-        self.en_button.pack()
+        # self.en_button = tk.Button(self, text="EisenbergNoe", command=self.eisenberg_noe_apply)
+        # self.en_button.pack()
+        #
+        # self.comp_button = tk.Button(self, text="Compression", command=self.compression_apply)
+        # self.comp_button.pack()
+        #
+        # self.quit_button = tk.Button(self, text="Quit", command=self.quit_command)
+        # self.quit_button.pack()
+        #
+        # self.reset_button = tk.Button(self, text="Reset", command=self.reset)
+        # self.reset_button.pack()
+        #
+        # self.new_graph_button = tk.Button(self, text="NewGraph", command=self.new_graph)
+        # self.new_graph_button.pack()
+        #
+        # self.simulation_button = tk.Button(self, text="Run Simulation",
+        #                                    command=self.run_simulation)
+        # self.simulation_button.pack()
 
-        self.comp_button = tk.Button(self, text="Compression", command=self.compression_apply)
-        self.comp_button.pack()
+        self.button_frame = tk.Frame(self)
+        self.button_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
-        self.quit_button = tk.Button(self, text="Quit", command=self.quit_command)
-        self.quit_button.pack()
+        self.en_button = tk.Button(self.button_frame, text="EisenbergNoe",
+                                   command=self.eisenberg_noe_apply)
+        self.en_button.pack(side=tk.LEFT)
 
-        self.reset_button = tk.Button(self, text="Reset", command=self.reset)
-        self.reset_button.pack()
+        self.comp_button = tk.Button(self.button_frame, text="Compression",
+                                     command=self.compression_apply)
+        self.comp_button.pack(side=tk.LEFT)
 
-        self.new_graph_button = tk.Button(self, text="NewGraph", command=self.new_graph)
-        self.new_graph_button.pack()
+        self.quit_button = tk.Button(self.button_frame, text="Quit",
+                                     command=self.quit_command)
+        self.quit_button.pack(side=tk.LEFT)
 
-        self.simulation_button = tk.Button(self, text="Run Simulation",
+        self.reset_button = tk.Button(self.button_frame, text="Reset",
+                                      command=self.reset)
+        self.reset_button.pack(side=tk.LEFT)
+
+        self.new_graph_button = tk.Button(self.button_frame, text="NewGraph",
+                                          command=self.new_graph)
+        self.new_graph_button.pack(side=tk.LEFT)
+
+        self.simulation_button = tk.Button(self.button_frame,
+                                           text="Run Simulation",
                                            command=self.run_simulation)
-        self.simulation_button.pack()
+        self.simulation_button.pack(side=tk.LEFT)
 
         self.pos = nx.spring_layout(self.network.graph)
         self.pos = dict(sorted(self.pos.items()))
@@ -308,7 +338,7 @@ class NetworkGraph(tk.Tk):
         # Update Pareto Improvement status
         pareto_improvement_status = "Yes" if eisenberg_noe.is_pareto_improvement() else "No"
         self.pareto_improvement_label.config(text=f"Pareto Improvement: {pareto_improvement_status}")
-
+        print(f'----{self.pareto_improvement_label.cget("text").split(": ")[1]}-----')
 
     def compression_apply(self):
         Compression(self.network).apply()
@@ -342,15 +372,6 @@ class NetworkGraph(tk.Tk):
 class Simulation:
     def __init__(self, app):
         self.app = app
-        # self.results_df = pd.DataFrame(columns=[
-        #     'EN Change in Equity', 'EN Change in Debt',
-        #     'EN Survived Nodes Change', 'EN Defaulted Nodes Change',
-        #     'EN Pareto Improvement',
-        #     'Compression+EN Change in Equity', 'Compression+EN Change in Debt',
-        #     'Compression+EN Survived Nodes Change',
-        #     'Compression+EN Defaulted Nodes Change',
-        #     'Compression+EN Pareto Improvement'
-        # ])
         self.results_df = pd.DataFrame(columns=[
             'EN Change in Debt',
             'EN Survived Nodes Change', 'EN Defaulted Nodes Change',
@@ -364,7 +385,6 @@ class Simulation:
     def run(self):
         for _ in range(10):
             initial_data = {
-                # 'Total Equity': self.app.network.total_network_equity(),
                 'Total Debt': self.app.network.total_network_debt(),
                 'Survived Nodes': self.app.network.survived_nodes_count(),
                 'Defaulted Nodes': self.app.network.defaulted_nodes_count()
@@ -373,8 +393,6 @@ class Simulation:
             self.app.reset()
             self.app.eisenberg_noe_apply()
             en_data = {
-                # 'Change in Equity': self.app.network.total_network_equity() -
-                #                     initial_data['Total Equity'],
                 'Change in Debt': self.app.network.total_network_debt() -
                                   initial_data['Total Debt'],
                 'Survived Nodes Change': self.app.network.survived_nodes_count() -
@@ -390,8 +408,6 @@ class Simulation:
             self.app.compression_apply()
             self.app.eisenberg_noe_apply()
             compression_en_data = {
-                # 'Change in Equity': self.app.network.total_network_equity() -
-                #                     initial_data['Total Equity'],
                 'Change in Debt': self.app.network.total_network_debt() -
                                   initial_data['Total Debt'],
                 'Survived Nodes Change': self.app.network.survived_nodes_count() -
@@ -403,13 +419,6 @@ class Simulation:
                     1] == 'Yes' else 'No'
             }
 
-            # row_data = {
-            #     **{k: v for k, v in initial_data.items() if
-            #        k not in ['Survived Nodes', 'Defaulted Nodes']},
-            #     **{'EN ' + k: v for k, v in en_data.items()},
-            #     **{'Compression+EN ' + k: v for k, v in
-            #        compression_en_data.items()}
-            # }
             row_data = {
                 **{'EN ' + k: v for k, v in en_data.items()},
                 **{'Compression+EN ' + k: v for k, v in
@@ -422,11 +431,6 @@ class Simulation:
 
         # Calculate the desired metrics after 100 simulations
         summary_data = {
-            # 'Avrg EN Change in Equity': self.results_df[
-            #     'EN Change in Equity'].mean(),
-            # 'Avrg EN+C Change in Equity': self.results_df[
-            #     'Compression+EN Change in Equity'].mean(),
-
             'Avrg EN Change in Debt': self.results_df[
                 'EN Change in Debt'].mean(),
             'Avrg EN+C Change in Debt': self.results_df[
@@ -455,9 +459,18 @@ class Simulation:
         }
 
         summary_df = pd.DataFrame([summary_data])
-        # Save the summary results to an Excel file
+
+        # Check if the file exists
+        if os.path.exists('summary_results.xlsx'):
+            # Read the existing data
+            existing_data = pd.read_excel('summary_results.xlsx')
+            # Append the new data
+            summary_df = pd.concat([existing_data, summary_df], ignore_index=True)
+
+        # Create file and save the summary
         summary_df.to_excel('summary_results.xlsx', index=False)
 
+        # Code for printing simulation results
         print("Printing Individual Run Data -------------------")
         print(self.results_df)
         print("Printing Summary Data --------------------------")
@@ -469,6 +482,6 @@ class Simulation:
 
 if __name__ == '__main__':
     logging.basicConfig(filename='default.log', level=logging.INFO)
-    network = Network(5, 10)
+    network = Network(5, 20)
     app = NetworkGraph(network)
     app.mainloop()
