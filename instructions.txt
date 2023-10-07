@@ -1,9 +1,10 @@
 Welcome!
 
-This file contains the instructions to the Computing Clearing Solutions in Financial Networks project by Balint Bodzsar. This project
-aims to implement a financial network with the possiblity to apply 2 algorithms onto it and compare their effects on the overall equity and
-debt in the network, as well as the amount of nodes that are "alive" and the amount of nodes that have defaulted post application. The first 
-one is a clearing algorithm by Eisenberg & Noe, and the other one is a compression algorithm from Schuldenzucker & Seuken.
+This file contains the instructions to the Computing Clearing Solutions in Financial Networks project by Andrew Bodzsar, as required by the 
+Individual Project module for the MSc Computational Finance course at King's College London. This project aims to implement a financial network with the 
+possiblity to apply 2 algorithms onto it and compare their effects on the overall equity and debt in the network, as well as the amount of 
+nodes that are "alive" and the amount of nodes that have defaulted post application. The first one is a clearing algorithm by Eisenberg & Noe,
+and the other one is a compression algorithm from Schuldenzucker & Seuken.
 
 The Run Simulation button on the bottom left of the GUI runs a simulation which clears the network of debts and measures the metrics
 described above, then resets the network to its original state and runs the compression algorithm followed by the clearing algorithm, and
