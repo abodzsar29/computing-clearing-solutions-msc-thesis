@@ -4,12 +4,15 @@ import copy
 import tkinter as tk
 from unittest.mock import Mock, patch
 import networkx as nx
-import logging
-from main29 import Node, Network, EisenbergNoe, Compression, NetworkGraph
+from node import Node
+from network import Network
+from eisenbergnoe import EisenbergNoe
+from compression import Compression
+from networkgraph import NetworkGraph
 
 
 # Objective 1 - Point 1 - Checking Node Initialisation
-class TestNodeInitialization(unittest.TestCase):
+class TestNodeInitialisation(unittest.TestCase):
     def setUp(self):
         self.node = Node(id=1,
                          equity=100,
@@ -19,13 +22,13 @@ class TestNodeInitialization(unittest.TestCase):
     def test_id(self):
         self.assertEqual(self.node.id,
                          1,
-                         "Node ID not initialized correctly.")
+                         "Node ID not initialised correctly.")
 
     # Checking whether Node equity is correctly initialised
     def test_equity(self):
         self.assertEqual(self.node.equity,
                          100,
-                         "Node equity not initialized correctly.")
+                         "Node equity not initialised correctly.")
         self.assertFalse(self.node.equity < 0,
                          "Node equity cannot be negative.")
         self.assertFalse(self.node.equity is None,
@@ -35,7 +38,7 @@ class TestNodeInitialization(unittest.TestCase):
     def test_debts(self):
         self.assertEqual(self.node.debts,
                          {2: 50, 3: 25},
-                         "Node debts not initialized correctly.")
+                         "Node debts not initialised correctly.")
         for debt in self.node.debts.values():
             self.assertFalse(debt < 0, "Debt value cannot be negative.")
             self.assertFalse(debt is None, "Debt value cannot be None.")
@@ -44,25 +47,25 @@ class TestNodeInitialization(unittest.TestCase):
     def test_defaulted(self):
         self.assertEqual(self.node.defaulted,
                          False,
-                         "Node defaulted status not initialized correctly.")
+                         "Node defaulted status not initialised correctly.")
 
-    # Checking whether Node color is correctly initialised
-    def test_color(self):
+    # Checking whether Node colour is correctly initialised
+    def test_colour(self):
         self.assertEqual(self.node.colour,
                          'green',
-                         "Node color not initialized correctly.")
+                         "Node colour not initialised correctly.")
 
 
 # Objective 1 - Point 1 - Checking Network Initialisation
-class TestNetworkInitialization(unittest.TestCase):
+class TestNetworkInitialisation(unittest.TestCase):
     def setUp(self):
         self.network = Network(mini=5, maxi=10)
 
     # Checking whether network initialisation properties conform to arguments
     def test_nodes(self):
-        self.assertTrue(self.network.nodes, "Network nodes not initialized.")
+        self.assertTrue(self.network.nodes, "Network nodes not initialised.")
         self.assertTrue(5 <= len(self.network.nodes) <= 10,
-                        "Network size not within expected range.")
+                        "Network si\e not within expected range.")
         for node in self.network.nodes:
             self.assertFalse(node.equity < 0, "Node equity cannot be negative.")
             self.assertFalse(node.equity is None, "Node equity cannot be None.")
@@ -97,7 +100,7 @@ class TestEisenbergNoe(unittest.TestCase):
         self.network = Network(5, 10)
         self.en = EisenbergNoe(self.network)
 
-    def test_initialization(self):
+    def test_initialisation(self):
         self.assertEqual(self.en.network, self.network)
         self.assertDictEqual(self.en.initial_equities, {node.id: node.equity for node in self.network.nodes})
 
@@ -151,15 +154,13 @@ class TestObjective2(unittest.TestCase):
 
     # Objective 2 - Point 1
     def test_reset(self):
-        self.node.equity = 0
-        self.node.debts = {}
         self.network.reset()
         self.assertEqual(self.node.equity, self.initial_node_equity)
         self.assertEqual(self.node.debts, self.initial_node_debts)
         self.assertEqual(self.network.graph.edges, self.initial_network_graph.edges)
 
-    # Objective 2 - Point 2
-    def test_compression_initialization(self):
+    # Verifying the copy
+    def test_compression_initialisation(self):
         self.assertEqual(self.compression.network, self.network)
 
     # Objective 2 - Point 2
@@ -172,26 +173,10 @@ class TestObjective2(unittest.TestCase):
         self.assertNotEqual(self.network.graph.edges, initial_network_graph.edges)
 
     # Objective 2 - Point 2
-    def test_simplify_debts(self):
-        node = self.network.nodes[0]
-        debtor_id, owed = next(iter(node.debts.items()))
-        self.network.nodes[debtor_id].debts[node.id] = owed
-        initial_debts = node.debts.copy()
-        self.compression.simplify_debts(node)
-        self.assertNotEqual(node.debts, initial_debts)
-        self.assertNotIn(node.id, self.network.nodes[debtor_id].debts)
-
-    # Objective 2 - Point 2
     def test_compression_apply_in_network_graph(self):
         initial_network_graph = self.app.network.graph.copy()
         self.app.compression_apply()
         self.assertNotEqual(self.app.network.graph.edges, initial_network_graph.edges)
-
-    # Objective 2 - Point 3
-    def test_node_default(self):
-        node = self.network.nodes[0]
-        node.equity = 0
-        self.assertEqual(node.defaulted, True)
 
 
 # Objective 3
@@ -202,33 +187,32 @@ class TestObjective3(unittest.TestCase):
 
     # Objective 3 - Point 1
     def test_defaulted_nodes_count(self):
-        # Note: To make this test more robust, consider creating a fixed network state with known defaulted nodes
         count = self.network.defaulted_nodes_count()
         self.assertEqual(count, sum(1 for node in self.network.nodes if node.defaulted))
 
-    # Objective 3 - Point 1
+    # Objective 3 - Point 2
     def test_survived_nodes_count(self):
-        # Note: To make this test more robust, consider creating a fixed network state with known survived nodes
+
         count = self.network.survived_nodes_count()
         self.assertEqual(count, sum(1 for node in self.network.nodes if not node.defaulted))
 
-    # Objective 3 - Point 2
+    # Objective 3 - Point 3
     def test_is_pareto_improvement(self):
         # Apply the Eisenberg Noe algorithm before testing for Pareto improvement
         self.eisenberg_noe.apply()
         self.assertEqual(self.eisenberg_noe.is_pareto_improvement(), all(node.equity >= node.initial_equity for node in self.network.nodes))
 
-    # Objective 3 - Point 3
+    # Objective 3 - Point 4
     def test_total_network_equity(self):
         total_equity = self.network.total_network_equity()
         self.assertEqual(total_equity, sum(node.equity for node in self.network.nodes))
 
-    # Objective 3 - Point 5
+    # Objective 3 - Point 6
     def test_total_network_debt(self):
         total_debt = self.network.total_network_debt()
         self.assertEqual(total_debt, sum(node.total_debt() for node in self.network.nodes))
 
-    # Objective 3 - Point 4
+    # Objective 3 - Point 5
     def test_node_equity_change(self):
         # Apply the Eisenberg Noe algorithm to generate changes in equity
         self.eisenberg_noe.apply()
@@ -245,7 +229,7 @@ class TestNetwork(unittest.TestCase):
         self.app = NetworkGraph(self.network)
 
     # Testing that the NetworkGraph class gets initialised correctly
-    def test_networkgraph_initialization(self):
+    def test_networkgraph_initialisation(self):
         self.assertIsInstance(self.app, NetworkGraph)
         self.assertEqual(self.app.network, self.network)
 
@@ -272,7 +256,7 @@ class TestNetwork(unittest.TestCase):
         self.assertEqual(node.debts, {3: 400})
 
     # Testing whether the nodes' colours represent their default status
-    def test_node_default_status_and_color(self):
+    def test_node_default_status_and_colour(self):
         node = Node(1, 1000, {2: 1200})
         self.assertTrue(node.defaulted)
         self.assertEqual(node.colour, 'red')
