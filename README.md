@@ -1,6 +1,6 @@
-# Computing Clearing Solutions in Financial Networks Project
+# Computing Clearing Solutions in Financial Networks
 
-Welcome! This document provides instructions for the project by Andrew Bodzsar, submitted for the MSc Computational Finance at King's College London.
+Welcome! This document provides instructions for the project developed by Andrew Bodzsar, submitted for the Individual Project module for the MSc Computational Finance course at King's College London.
 
 ## Project Overview
 
