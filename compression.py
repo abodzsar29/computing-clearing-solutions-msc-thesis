@@ -1,52 +1,63 @@
-from network import Network
-import random
+# Standard libraries
 import logging
-import tkinter as tk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import networkx as nx
 import copy
-import pandas as pd
-import os
 
+# Project modules
+# from network import Network # Not strictly needed
 
 class Compression:
-    def __init__(self, network):  # Initialize the Compression class with the network instance
+    """Applies bilateral debt netting/compression to the network."""
+    def __init__(self, network):
         self.network = network
 
-    def apply(self):  # Apply the compression algorithm to the network
-        for node in self.network.nodes:  # Loop through each node in the network
-            self.calculate_net_debt(node)  # Calculate the net debt of the node
-            self.simplify_debts(node)  # Simplify the debts of the node
-            node.defaulted = node.equity < node.total_debt()  # Update defaulted status of the node based on its equity and total debt
-            node.colour = 'red' if node.defaulted is True else 'green'  # Update the color of the node based on its defaulted status
+    def apply(self):
+        """Simplifies mutual debts for all pairs of nodes in the network."""
+        logging.info("Applying debt compression/netting...")
+        nodes = self.network.nodes
+        processed_pairs = set() # Track processed pairs
 
-    def calculate_net_debt(self, node):  # Method to calculate net debt between each pair of nodes
-        debt_items = list(node.debts.items())  # Get a list of debtor id and owed amount pairs
-        for debtor_id, owed in debt_items:  # For each debtor id and owed amount pair
-            if debtor_id in node.debts and node.id in self.network.nodes[debtor_id].debts:  # Check if there is mutual debt between the nodes
-                reciprocal_debt = self.network.nodes[debtor_id].debts[node.id]  # Get the reciprocal debt owed by the debtor to the node
-                net_debt = owed - reciprocal_debt  # Calculate the net debt between the two nodes
-                print(f"Net debt between node {node.id} and node {debtor_id} is: {net_debt}")  # Print the net debt
+        for i in range(len(nodes)):
+            node_i = nodes[i]
+            for j in range(i + 1, len(nodes)): # Check unique pairs
+                node_j = nodes[j]
+                pair = tuple(sorted((node_i.id, node_j.id)))
 
-    def simplify_debts(self, node):  # Method to simplify debts between each pair of nodes
-        debt_items = list(node.debts.items())  # Get a list of debtor id and owed amount pairs
-        for debtor_id, owed in debt_items:  # For each debtor id and owed amount pair
-            if debtor_id in node.debts and node.id in self.network.nodes[debtor_id].debts:  # Check if there is mutual debt between the nodes
-                reciprocal_debt = self.network.nodes[debtor_id].debts[node.id]  # Get the reciprocal debt owed by the debtor to the node
-                if owed <= reciprocal_debt:  # If owed amount is less than or equal to the reciprocal debt
-                    self.network.nodes[debtor_id].debts[node.id] -= owed  # Subtract owed amount from the debtor's debt
-                    del node.debts[debtor_id]  # Delete the debt entry from the node's debts
-                    if self.network.graph.has_edge(node.id, debtor_id):  # If an edge exists between the nodes in the graph
-                        self.network.graph.remove_edge(node.id, debtor_id)  # Remove the edge
-                else:  # If owed amount is more than the reciprocal debt
-                    node.debts[debtor_id] -= reciprocal_debt  # Subtract reciprocal debt from the node's owed amount
-                    del self.network.nodes[debtor_id].debts[node.id]  # Delete the reciprocal debt entry from the debtor's debts
-                    if self.network.graph.has_edge(debtor_id, node.id):  # If an edge exists between the nodes in the graph
-                        self.network.graph.remove_edge(debtor_id, node.id)  # Remove the edge
-            node.defaulted = node.equity < node.total_debt()  # Update defaulted status of the node based on its equity and total debt
-            node.colour = 'red' if node.defaulted is True else 'green'  # Update the color of the node based on its defaulted status
-            debtor = self.network.nodes[debtor_id]  # Get the debtor node
-            debtor.defaulted = debtor.equity < debtor.total_debt()  # Update defaulted status of the debtor based on its equity and total debt
-            debtor.colour = 'red' if debtor.defaulted is True else 'green'  # Update the color of the debtor based on its defaulted status
+                if pair not in processed_pairs:
+                    self.simplify_mutual_debt(node_i, node_j)
+                    processed_pairs.add(pair)
 
+        # Update node statuses after all simplifications
+        for node in nodes:
+             node.update_color()
+        logging.info("Compression finished.")
+
+    def simplify_mutual_debt(self, node_a, node_b):
+        """Simplifies debt between two specific nodes if it's mutual."""
+        a_owes_b_amount = node_a.debts.get(node_b.id, 0)
+        b_owes_a_amount = node_b.debts.get(node_a.id, 0)
+
+        # Only proceed if both debts are significant
+        if a_owes_b_amount > 1e-9 and b_owes_a_amount > 1e-9:
+            logging.debug(f"Compressing mutual debt between {node_a.id} and {node_b.id}: A owes {a_owes_b_amount:.2f}, B owes {b_owes_a_amount:.2f}")
+            netting_amount = min(a_owes_b_amount, b_owes_a_amount)
+
+            new_a_owes_b = a_owes_b_amount - netting_amount
+            new_b_owes_a = b_owes_a_amount - netting_amount
+
+            # Update Node A's debts
+            if new_a_owes_b <= 1e-9:
+                if node_b.id in node_a.debts: del node_a.debts[node_b.id]
+                if self.network.graph.has_edge(node_a.id, node_b.id):
+                    self.network.graph.remove_edge(node_a.id, node_b.id)
+                    logging.debug(f"Removed edge {node_a.id}->{node_b.id}")
+            else:
+                node_a.debts[node_b.id] = new_a_owes_b
+
+            # Update Node B's debts
+            if new_b_owes_a <= 1e-9:
+                if node_a.id in node_b.debts: del node_b.debts[node_a.id]
+                if self.network.graph.has_edge(node_b.id, node_a.id):
+                    self.network.graph.remove_edge(node_b.id, node_a.id)
+                    logging.debug(f"Removed edge {node_b.id}->{node_a.id}")
+            else:
+                node_b.debts[node_a.id] = new_b_owes_a

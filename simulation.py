@@ -1,18 +1,19 @@
-import random
+# Standard libraries
 import logging
-import tkinter as tk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import networkx as nx
-import copy
-import pandas as pd
 import os
+import copy
+
+# Third-party libraries
+import pandas as pd
+import tkinter as tk
+import networkx as nx
+# Project modules
 from networkgraph import NetworkGraph
 
 
 class Simulation:
     def __init__(self, app):
-        self.app = app
+        self.app = app # The NetworkGraph application instance
         self.results_df = pd.DataFrame(columns=[
             'EN Change in Debt',
             'EN Survived Nodes Change', 'EN Defaulted Nodes Change',
@@ -24,53 +25,59 @@ class Simulation:
         ])
 
     def run(self):
-        for _ in range(10):
+        results_list = []  # Accumulate rows for concat
+        for _ in range(10): # Run 10 iterations/graphs
+            # --- Get initial state of the current graph ---
+            current_network = self.app.network
             initial_data = {
-                'Total Debt': self.app.network.total_network_debt(),
-                'Survived Nodes': self.app.network.survived_nodes_count(),
-                'Defaulted Nodes': self.app.network.defaulted_nodes_count()
+                'Total Debt': current_network.total_network_debt(),
+                'Survived Nodes': current_network.survived_nodes_count(),
+                'Defaulted Nodes': current_network.defaulted_nodes_count()
             }
 
-            self.app.reset()
-            self.app.eisenberg_noe_apply()
+            # --- Run Eisenberg-Noe Only ---
+            self.app.reset() # Reset to initial state of the current graph
+            self.app.eisenberg_noe_apply() # Apply EN
             en_data = {
-                'Change in Debt': self.app.network.total_network_debt() -
+                'Change in Debt': current_network.total_network_debt() -
                                   initial_data['Total Debt'],
-                'Survived Nodes Change': self.app.network.survived_nodes_count() -
+                'Survived Nodes Change': current_network.survived_nodes_count() -
                                          initial_data['Survived Nodes'],
-                'Defaulted Nodes Change': self.app.network.defaulted_nodes_count() -
+                'Defaulted Nodes Change': current_network.defaulted_nodes_count() -
                                           initial_data['Defaulted Nodes'],
-                'Pareto Improvement': 'Yes' if
-                self.app.pareto_improvement_label.cget("text").split(": ")[
-                    1] == 'Yes' else 'No'
+                'Pareto Improvement': 'Yes' if self.app.last_pareto_status else 'No'
             }
 
-            self.app.reset()
-            self.app.compression_apply()
-            self.app.eisenberg_noe_apply()
+            # --- Run Compression + Eisenberg-Noe ---
+            self.app.reset() # Reset to initial state of the current graph
+            self.app.compression_apply() # Apply Compression
+            self.app.eisenberg_noe_apply() # Apply EN after Compression
             compression_en_data = {
-                'Change in Debt': self.app.network.total_network_debt() -
+                'Change in Debt': current_network.total_network_debt() -
                                   initial_data['Total Debt'],
-                'Survived Nodes Change': self.app.network.survived_nodes_count() -
+                'Survived Nodes Change': current_network.survived_nodes_count() -
                                          initial_data['Survived Nodes'],
-                'Defaulted Nodes Change': self.app.network.defaulted_nodes_count() -
+                'Defaulted Nodes Change': current_network.defaulted_nodes_count() -
                                           initial_data['Defaulted Nodes'],
-                'Pareto Improvement': 'Yes' if
-                self.app.pareto_improvement_label.cget("text").split(": ")[
-                    1] == 'Yes' else 'No'
+                'Pareto Improvement': 'Yes' if self.app.last_pareto_status else 'No'
             }
 
+            # --- Store results for this iteration ---
             row_data = {
                 **{'EN ' + k: v for k, v in en_data.items()},
                 **{'Compression+EN ' + k: v for k, v in
                    compression_en_data.items()}
             }
-            self.results_df = self.results_df.append(row_data,
-                                                     ignore_index=True)
+            results_list.append(row_data) # Add row data to list
 
+            # --- Generate a new graph for the next iteration ---
             self.app.new_graph()
 
-        # Calculate the desired metrics after 100 simulations
+        # --- Aggregate results after all iterations ---
+        new_results_df = pd.DataFrame(results_list)
+        self.results_df = pd.concat([self.results_df, new_results_df], ignore_index=True)
+
+        # --- Calculate summary metrics over the 10 runs ---
         summary_data = {
             'Avrg EN Change in Debt': self.results_df[
                 'EN Change in Debt'].mean(),
@@ -101,18 +108,25 @@ class Simulation:
 
         summary_df = pd.DataFrame([summary_data])
 
-        # Check if the file exists
-        if os.path.exists('summary_results.xlsx'):
-            # Read the existing data
-            existing_data = pd.read_excel('summary_results.xlsx')
-            # Append the new data
-            summary_df = pd.concat([existing_data, summary_df], ignore_index=True)
+        # --- Save summary results ---
+        output_filename = 'summary_results.xlsx'
+        try:
+            # Check if the file exists
+            if os.path.exists(output_filename):
+                # Read the existing data
+                existing_data = pd.read_excel(output_filename)
+                # Append the new data
+                summary_df = pd.concat([existing_data, summary_df], ignore_index=True)
 
-        # Create file and save the summary
-        summary_df.to_excel('summary_results.xlsx', index=False)
+            # Create file and save the summary
+            summary_df.to_excel(output_filename, index=False)
+            logging.info(f"Summary results saved to {output_filename}")
 
-        # Code for printing simulation results
-        print("Printing Individual Run Data -------------------")
-        print(self.results_df)
-        print("Printing Summary Data --------------------------")
-        print(summary_df)
+        except Exception as e:
+            logging.error(f"Failed to save summary results to Excel: {e}")
+
+        # --- Print results to console ---
+        print("\nPrinting Individual Run Data (Last 10 Runs) -------------------")
+        print(self.results_df.tail(10).to_string())
+        print("\nPrinting Summary Data (From Excel File) --------------------------")
+        print(summary_df.to_string())

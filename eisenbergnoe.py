@@ -1,62 +1,123 @@
-from network import Network
-import random
+# Standard libraries
 import logging
-import tkinter as tk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import networkx as nx
 import copy
-import pandas as pd
-import os
+
+# Project modules
+from network import Network
 
 class EisenbergNoe:
-    def __init__(self, network):  # Constructor method to initialize the EisenbergNoe class
-        self.network = network  # Network instance to apply Eisenberg Noe
-        self.initial_equities = {node.id: node.equity for node in network.nodes}  # Dictionary storing initial equities of nodes
+    """Implements the Eisenberg & Noe (2001) clearing algorithm."""
+    def __init__(self, network):
+        if not isinstance(network, Network):
+            raise TypeError("EisenbergNoe requires a Network object.")
+        self.network = network
+        # Store initial equities for Pareto check and change calculation
+        self.initial_equities = {node.id: node.equity for node in network.nodes}
 
-    def apply(self):  # Method to apply the Eisenberg Noe model
-        debts_cleared = True
-        while debts_cleared:  # Iterate until no debts are cleared
-            debts_cleared = False  # Set debts_cleared to False at the start of each iteration
-            for node in sorted(self.network.nodes, key=lambda x: x.id):  # Iterate over sorted nodes
-                original_debts = dict(node.debts)  # Keep a copy of the original debts
-                self.clear_debts(node)  # Call to method to clear the debts
-                if node.debts != original_debts:  # If the debts have changed, set debts_cleared to True
-                    debts_cleared = True
+    def apply(self, max_iterations=100, tolerance=1e-9):
+        """
+        Applies the Eisenberg Noe model iteratively until convergence or max iterations.
 
-        for node in self.network.nodes:  # After all iterations, set the defaulted value of each node based on its final equity value
-            node.equity = round(node.equity, 2)  # Round equity to 2 decimal places
-            node.defaulted = node._equity < node.total_debt()  # Node is defaulted if equity is less than total debt
-            print(f"{node.id} is: Defaulted: {node.defaulted}")  # Print the defaulted status of node
+        Args:
+            max_iterations (int): Maximum number of iterations to prevent infinite loops.
+            tolerance (float): Convergence tolerance for equity changes.
+        """
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            equity_changed_significantly = False
+            previous_equities = {node.id: node.equity for node in self.network.nodes}
 
-    def is_pareto_improvement(self):  # Method to check for Pareto improvement
-        for node in self.network.nodes:  # For each node in the network
-            if node.equity < self.initial_equities[node.id]:  # If node's equity is less than the initial equity
-                return False  # Return False indicating no Pareto improvement
-        return True  # If all nodes' equities are greater or equal to initial equities, return True indicating Pareto improvement
+            for node in self.network.nodes:
+                self.clear_debts_for_node(node)
 
-    def clear_debts(self, node):  # Method to clear the debts of a node
-        total_debt = node.total_debt()  # Total debt of the node
-        if total_debt == 0:  # If total debt is zero, no need to clear, so return
+            # Check for convergence
+            max_change = 0
+            for node in self.network.nodes:
+                change = abs(node.equity - previous_equities[node.id])
+                max_change = max(max_change, change)
+                if change > tolerance:
+                    equity_changed_significantly = True
+
+            if not equity_changed_significantly:
+                logging.info(f"Eisenberg-Noe converged after {iteration} iterations.")
+                break
+        else: # max_iterations reached
+             logging.warning(f"Eisenberg-Noe did not converge after {max_iterations} iterations. Max change: {max_change}")
+
+        # Final state update
+        logging.info("Finalizing node states post-clearing.")
+        for node in self.network.nodes:
+            # Enforce clearing conditions: if node has positive equity, it should have zero debt
+            if node.equity > tolerance:
+                node.debts = {}
+                # Also remove outgoing edges in the graph
+                for edge in list(self.network.graph.out_edges(node.id)):
+                    self.network.graph.remove_edge(edge[0], edge[1])
+                    
+            node.equity = round(node.equity, 6)
+            node.update_color()
+
+    def is_pareto_improvement(self):
+        """Checks if any node's equity decreased compared to its pre-clearing state."""
+        for node in self.network.nodes:
+            if node.equity < self.initial_equities[node.id] - 1e-9:
+                logging.info(f"Node {node.id} worse off: Initial={self.initial_equities[node.id]:.2f}, Final={node.equity:.2f}. Not Pareto Improvement.")
+                return False
+        logging.info("No node worse off. Pareto Improvement achieved.")
+        return True
+
+    def clear_debts_for_node(self, node):
+        """Calculates and distributes payments for a single node based on its current equity."""
+        total_debt = node.total_debt()
+        if total_debt <= 1e-9:
             return
-        debt_items = list(node.debts.items())  # List of debtor ID and debt pairs
-        for debtor_id, owed in debt_items:  # For each debtor ID and debt pair
-            debtor = self.network.nodes[debtor_id]  # Get the debtor node
-            payment = (owed / total_debt) * node.equity  # Calculate payment
-            node.equity -= payment  # Deduct payment from node's equity
-            debtor.equity += payment  # Add payment to debtor's equity
-            if debtor_id in node.debts:  # If debtor ID exists in node's debts
-                node.debts[debtor_id] -= payment  # Deduct payment from the debt owed
-                if node.debts[debtor_id] <= 0:  # If the debt owed is now zero or less
-                    del node.debts[debtor_id]  # Delete the debt entry
-                    if self.network.graph.has_edge(node.id, debtor_id):  # If an edge exists from node to debtor in the graph
-                        self.network.graph.remove_edge(node.id, debtor_id)  # Remove the edge
-                    logging.info(f"Node {node.id} paid off all its debts.")  # Log that node has paid off all its debts
-            node.update_color()  # Update node's color
-            debtor.update_color()  # Update debtor's color
-            node.defaulted = node.equity < node.total_debt()  # Set node's defaulted status based on its equity and total debt
-            debtor.defaulted = debtor.equity < debtor.total_debt()  # Set debtor's defaulted status based on its equity and total debt
 
-    def node_equity_change(self):  # Method to calculate and print equity change for each node
-        for node in self.network.nodes:  # For each node in the network
-            print(f'Node {node.id} Equity Change: {node.equity - self.initial_equities[node.id]}')  # Print the equity change of the node
+        available_equity = node.equity
+        if available_equity <= 1e-9:
+             node.equity = 0
+             return
+
+        # Node pays proportionally up to its available equity
+        payment_fraction = min(available_equity / total_debt, 1.0)
+
+        debt_items = list(node.debts.items()) # Iterate over a copy
+        total_paid_by_node = 0
+
+        for creditor_id, owed in debt_items:
+            payment = owed * payment_fraction
+            actual_payment = round(payment, 6)
+
+            if actual_payment > 1e-9:
+                creditor = self.network.get_node_by_id(creditor_id)
+                if creditor:
+                    total_paid_by_node += actual_payment
+                    creditor.equity += actual_payment
+
+                    # Update debt amount owed by node
+                    new_debt = node.debts[creditor_id] - actual_payment
+                    if new_debt <= 1e-9:
+                        del node.debts[creditor_id]
+                        if self.network.graph.has_edge(node.id, creditor_id):
+                            self.network.graph.remove_edge(node.id, creditor_id)
+                            logging.debug(f"Debt cleared: {node.id} -> {creditor_id}. Edge removed.")
+                    else:
+                        node.debts[creditor_id] = new_debt
+                else:
+                    logging.warning(f"Node {node.id} trying to pay non-existent creditor {creditor_id}")
+
+        node.equity -= total_paid_by_node
+        # Ensure equity is not negative
+        if node.equity < 0:
+            node.equity = 0
+
+        # Update node's color/status
+        node.update_color()
+
+    def node_equity_change(self):
+        """Prints the change in equity for each node compared to its pre-clearing state."""
+        print("\n--- Equity Changes Post Eisenberg-Noe ---")
+        for node in self.network.nodes:
+            change = node.equity - self.initial_equities[node.id]
+            print(f'Node {node.id}: Initial Equity={self.initial_equities[node.id]:.2f}, Final Equity={node.equity:.2f}, Change={change:+.2f}')
+        print("----------------------------------------")
